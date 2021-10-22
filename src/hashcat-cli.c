@@ -13831,6 +13831,9 @@ uint32_t xop_enabled ()
 
 int main (int argc, char *argv[])
 {
+  fprintf(stderr, "**********************************\n");
+  fprintf(stderr, "***** MODIFIED BY UNCLE DAVE *****\n");
+  fprintf(stderr, "**********************************\n\n\n");
   time (&proc_start);
 
   setvbuf (stdout, NULL, _IONBF, 0);

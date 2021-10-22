@@ -238,7 +238,7 @@
 #define SALT_SIZE_MAX_MSSQL2000     8
 #define SALT_SIZE_MAX_MSSQL2005     8
 #define SALT_SIZE_MIN_SHA256        0
-#define SALT_SIZE_MAX_SHA256        54
+#define SALT_SIZE_MAX_SHA256        1024
 #define SALT_SIZE_MIN_MD5APR        0
 #define SALT_SIZE_MAX_MD5APR        8
 #define SALT_SIZE_MIN_SHA512        0
