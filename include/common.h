@@ -387,10 +387,10 @@ typedef struct
 {
   union
   {
-    uint8_t  buf8[256];
-    uint32_t buf[64];
-    uint64_t buf64[32];
-    __m128i  buf128[16];
+    uint8_t  buf8[512];
+    uint32_t buf[128];
+    uint64_t buf64[64];
+    __m128i  buf128[32];
   };
 
   uint32_t len;
