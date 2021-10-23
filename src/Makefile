@@ -23,8 +23,8 @@ endif
 
 # -mstackrealign is required otherwise crashes on windows xp, see hashcat v0.41 and v0.42
 
-CFLAGS  := -W -Wall -pipe -I include/ -O2 -s -fomit-frame-pointer -funroll-loops
-#CFLAGS  := -W -Wall -pipe -I include/ -g
+#CFLAGS  := -W -Wall -pipe -I include/ -O2 -s -fomit-frame-pointer -funroll-loops
+CFLAGS  := -W -Wall -pipe -I include/ -g
 LDFLAGS :=
 
 ##

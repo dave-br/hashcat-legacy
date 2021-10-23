@@ -8336,11 +8336,11 @@ void load_hashes (FILE *fp, db_t *db, engine_parameter_t *engine_parameter)
 
         salt_t *salt_search = init_new_salt ();
 
-        salt_search->salt_plain_buf     = mymalloc (BLOCK_SIZE);
-        salt_search->salt_prehashed_buf = mymalloc (BLOCK_SIZE);
+        salt_search->salt_plain_buf     = mymalloc (salt_len + 1);
+        salt_search->salt_prehashed_buf = mymalloc (salt_len + 1);
 
-        memset (salt_search->salt_plain_buf,     0, BLOCK_SIZE);
-        memset (salt_search->salt_prehashed_buf, 0, BLOCK_SIZE);
+        memset (salt_search->salt_plain_buf,     0, salt_len + 1);
+        memset (salt_search->salt_prehashed_buf, 0, salt_len + 1);
 
         memcpy (salt_search->salt_plain_buf,     salt_buf, salt_len);
         memcpy (salt_search->salt_prehashed_buf, salt_buf, salt_len);

@@ -6836,7 +6836,7 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
     {
       memcpy (ptrs_tmp[i], salt->salt_plain_buf, salt->salt_plain_len);
 
-      memset (ptrs_tmp[i] + salt->salt_plain_len, 0, BLOCK_SIZE - salt->salt_plain_len);
+      //memset (ptrs_tmp[i] + salt->salt_plain_len, 0, BLOCK_SIZE - salt->salt_plain_len);
 
       ptrs_tmp[i][salt->salt_plain_len] = 0x80;
 
