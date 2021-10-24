@@ -6757,12 +6757,15 @@ void hashing_01440 (thread_parameter_t *thread_parameter, plain_t *in)
   }
 }
 
+// plains[] = next 4 keys from word list to try
 void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
 {
   digest_t digests[4];
 
+  // plains_tmp[0] will hold msg to hash (jwt plain header+payload)
   plain_t plains_tmp[4];
 
+  // ptrs_tmp[0] will point to msg to hash (jwt plain header+payload)
   char *ptrs_tmp[4];
 
   ptrs_tmp[0] = (char *) &plains_tmp[0].buf;
@@ -6773,7 +6776,10 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
   uint32_t ipad_dgst[8][4] __attribute__ ((aligned (16)));
   uint32_t opad_dgst[8][4] __attribute__ ((aligned (16)));
 
+  // ipad[][i] = ipad from HMAC https://datatracker.ietf.org/doc/html/rfc2104
   uint32_t ipad_buf[16][4] __attribute__ ((aligned (16)));
+
+  // opad[][j] = opad from HMAC https://datatracker.ietf.org/doc/html/rfc2104
   uint32_t opad_buf[16][4] __attribute__ ((aligned (16)));
 
   db_t *db = thread_parameter->db;
@@ -6782,11 +6788,16 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
   uint32_t j;
   uint32_t l;
 
+  // i = index of key to try
   for (i = 0; i < 4; i++)
   {
+    // j = index of DWORD of buffer
     for (j = 0; j < 16; j++)
     {
+      // K XOR ipad, HMAC step (2)
       ipad_buf[j][i] = 0x36363636 ^ plains[i].buf[j];
+
+      // K XOR opad, HMAC step (5)
       opad_buf[j][i] = 0x5c5c5c5c ^ plains[i].buf[j];
     }
 
@@ -6814,6 +6825,7 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
 
   uint32_t salts_idx;
 
+  // salts_idx will just stay 0; only one msg to hash (jwt plain header+payload)
   for (salts_idx = 0; salts_idx < db->salts_cnt; salts_idx++)
   {
     salt_t *salt = db->salts_buf[salts_idx];
@@ -6834,6 +6846,7 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
 
     for (i = 0; i < 4; i++)
     {
+      // salt->salt_plain_buf = msg to hash (jwt plain header+payload)
       memcpy (ptrs_tmp[i], salt->salt_plain_buf, salt->salt_plain_len);
 
       //memset (ptrs_tmp[i] + salt->salt_plain_len, 0, BLOCK_SIZE - salt->salt_plain_len);
