@@ -6777,6 +6777,7 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
   uint32_t opad_dgst[8][4] __attribute__ ((aligned (16)));
 
   // ipad[][i] = ipad from HMAC https://datatracker.ietf.org/doc/html/rfc2104
+  // First dim = index of DWORD in ipad.  Originally 16 DWORDS = 64 bytes = BLOCK_SIZE
   uint32_t ipad_buf[16][4] __attribute__ ((aligned (16)));
 
   // opad[][j] = opad from HMAC https://datatracker.ietf.org/doc/html/rfc2104
@@ -6851,25 +6852,34 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
 
       //memset (ptrs_tmp[i] + salt->salt_plain_len, 0, BLOCK_SIZE - salt->salt_plain_len);
 
+      // TODO: ??
       ptrs_tmp[i][salt->salt_plain_len] = 0x80;
 
+      // Copy msg to hash (jwt plain header+payload) into ipad_buf, one
+      // DWORD at a time.  Only first 14 DWORDs (56 bytes) 
       for (j = 0; j < 14; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
 
+      // TODO: Last two DWORDs of ipad_buf are special
       ipad_buf[14][i] = 0;
       ipad_buf[15][i] = (64 + salt->salt_plain_len) * 8;
     }
 
+    // BYTESWAP reverses order of bytes in 32-bit value
     for (i = 14; i < 16; i++) for (l = 0; l < 4; l++) BYTESWAP (ipad_buf[i][l]);
 
     hashcat_sha256_64 ((__m128i *) ipad_dgst_tmp, (__m128i *) ipad_buf);
 
     for (i = 0; i < 4; i++)
     {
+      // Preload opad_buf with output from sha256 hash of ipad_buf.  But only
+      // first 8 DWORDs (32 bytes)
+      // TODO: Why?
       for (j = 0; j < 8; j++)
       {
         opad_buf[j][i] = ipad_dgst_tmp[j][i];
       }
 
+      // TODO: Remaining 8 DWORDs are special.  Why?
       opad_buf[ 8][i] = 0x80000000;
       opad_buf[ 9][i] = 0;
       opad_buf[10][i] = 0;
