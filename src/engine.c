@@ -4910,6 +4910,8 @@ void indb_single (thread_parameter_t *thread_parameter, plain_t *plains, digest_
   {
     digest_t *digest_ptr = &digests[i];
 
+    // Calls int compare_digest_sha256 (const void *p1, const void *p2)
+    // which does memcmp against both params' ->buf.sha256
     if (thread_parameter->compare_digest (&digest_ptr, &thread_parameter->quick_digest) != 0) continue;
 
     ACMutexLock (lock_store);
@@ -6821,7 +6823,12 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
     opad_dgst[7][i] = SHA256M_H;
   }
 
+  // Hash K xor ipad (first 64-byte block of (4))
+  // The (__m128i *) cast allows all 4 DWORDs from 2nd dim (ipad_dgst[][i]) to
+  // be operated on simultaneously, so that 
   hashcat_sha256_64 ((__m128i *) ipad_dgst, (__m128i *) ipad_buf);
+
+  // Hash K xor opad (first 64-byte block of (7))
   hashcat_sha256_64 ((__m128i *) opad_dgst, (__m128i *) opad_buf);
 
   uint32_t salts_idx;
@@ -6867,6 +6874,7 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
     // BYTESWAP reverses order of bytes in 32-bit value
     for (i = 14; i < 16; i++) for (l = 0; l < 4; l++) BYTESWAP (ipad_buf[i][l]);
 
+    // Hash the message (rest of (4))
     hashcat_sha256_64 ((__m128i *) ipad_dgst_tmp, (__m128i *) ipad_buf);
 
     for (i = 0; i < 4; i++)
@@ -6892,6 +6900,7 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
 
     for (i = 0; i < 16; i++) for (l = 0; l < 4; l++) BYTESWAP (opad_buf[i][l]);
 
+    // Hash the last hash we made (rest of (7))
     hashcat_sha256_64 ((__m128i *) opad_dgst_tmp, (__m128i *) opad_buf);
 
     for (i = 0; i < 4; i++)
@@ -6902,6 +6911,11 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
       }
     }
 
+    // Calls void indb_single
+    //  (thread_parameter_t *thread_parameter, plain_t *plains,
+    //  digest_t *digests, salt_t *salt)
+    // which, in turn, compares each digests[i]'s buf.sha256[] against reference digest
+    // from thread_parameter
     thread_parameter->indb (thread_parameter, plains, digests, salt);
   }
 }
