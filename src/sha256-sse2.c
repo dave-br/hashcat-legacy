@@ -43,6 +43,8 @@
   W[(i) & 0xf] = t0;                                \
 }
 
+// digests = 256 bits x 4 keys, [in]: init'd hash values, [out] sha256 output
+// W = [in] 32 bits x 64 (W from https://en.wikipedia.org/wiki/SHA-2#Pseudocode)
 void hashcat_sha256_64 (__m128i digests[8], __m128i W[16])
 {
   __m128i a = digests[0];
@@ -58,6 +60,7 @@ void hashcat_sha256_64 (__m128i digests[8], __m128i W[16])
 
   for (i = 0; i < 16; i++) W[i] = SWAP32_SSE (W[i]);
 
+  // sha256: "Compression function main loop" for first 16 DWORDs of W
   SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, a, b, c, d, e, f, g, h,  0, SHA256C00);
   SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, h, a, b, c, d, e, f, g,  1, SHA256C01);
   SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, g, h, a, b, c, d, e, f,  2, SHA256C02);
@@ -75,6 +78,9 @@ void hashcat_sha256_64 (__m128i digests[8], __m128i W[16])
   SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, c, d, e, f, g, h, a, b, 14, SHA256C0e);
   SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, b, c, d, e, f, g, h, a, 15, SHA256C0f);
 
+  // sha256: combine the "Extend the first 16 words into the remaining
+  //         48 words w[16..63] of the message schedule array" step with
+  //         "Compression function main loop" for rest of W
   SHA256_EXPAND_SSE (16); SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, a, b, c, d, e, f, g, h, 16, SHA256C10);
   SHA256_EXPAND_SSE (17); SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, h, a, b, c, d, e, f, g, 17, SHA256C11);
   SHA256_EXPAND_SSE (18); SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, g, h, a, b, c, d, e, f, 18, SHA256C12);
@@ -124,6 +130,7 @@ void hashcat_sha256_64 (__m128i digests[8], __m128i W[16])
   SHA256_EXPAND_SSE (62); SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, c, d, e, f, g, h, a, b, 62, SHA256C3e);
   SHA256_EXPAND_SSE (63); SHA256_STEP_SSE (SHA256_F0_SSE, SHA256_F1_SSE, b, c, d, e, f, g, h, a, 63, SHA256C3f);
 
+  // sha256: Add the compressed chunk to the current hash value
   digests[0] = _mm_add_epi32 (a, digests[0]);
   digests[1] = _mm_add_epi32 (b, digests[1]);
   digests[2] = _mm_add_epi32 (c, digests[2]);

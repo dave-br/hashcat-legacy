@@ -6804,6 +6804,8 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
       opad_buf[j][i] = 0x5c5c5c5c ^ plains[i].buf[j];
     }
 
+    // SHA-256: Initialize hash values
+
     ipad_dgst[0][i] = SHA256M_A;
     ipad_dgst[1][i] = SHA256M_B;
     ipad_dgst[2][i] = SHA256M_C;
@@ -6825,7 +6827,7 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
 
   // Hash K xor ipad (first 64-byte block of (4))
   // The (__m128i *) cast allows all 4 DWORDs from 2nd dim (ipad_dgst[][i]) to
-  // be operated on simultaneously, so that 
+  // be operated on simultaneously, so that 4 keys can be tested simultaneously
   hashcat_sha256_64 ((__m128i *) ipad_dgst, (__m128i *) ipad_buf);
 
   // Hash K xor opad (first 64-byte block of (7))
@@ -6836,12 +6838,12 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
   // salts_idx will just stay 0; only one msg to hash (jwt plain header+payload)
   for (salts_idx = 0; salts_idx < db->salts_cnt; salts_idx++)
   {
-    salt_t *salt = db->salts_buf[salts_idx];
+    salt_t* salt = db->salts_buf[salts_idx];
 
     if (salt->indexes_found == salt->indexes_cnt) continue;
 
-    uint32_t ipad_dgst_tmp[8][4] __attribute__ ((aligned (16)));
-    uint32_t opad_dgst_tmp[8][4] __attribute__ ((aligned (16)));
+    uint32_t ipad_dgst_tmp[8][4] __attribute__((aligned(16)));
+    uint32_t opad_dgst_tmp[8][4] __attribute__((aligned(16)));
 
     for (i = 0; i < 4; i++)
     {
@@ -6852,42 +6854,61 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
       }
     }
 
-    for (i = 0; i < 4; i++)
+    // new code to support >1 block-sized messages to hash
+    // total length is msg length plus bits sha256 requires at end:
+    //  plain_msg 1 00..<K 0's>..00 <L as 64 bit integer>
+    uint32_t salt_plain_total_bitlen_nopad = salt->salt_plain_len * 8 + 1 + 64;
+    uint32_t salt_plain_bitpad = salt_plain_total_bitlen_nopad % 512;
+    uint32_t cb_salt_plain_total = (salt_plain_total_bitlen_nopad + salt_plain_bitpad) / 8;
+
+    // Begin: allow >1 block-sized messages to hash
+    for (uint32_t cbPlainOffset = 0; cbPlainOffset < cb_salt_plain_total; cbPlainOffset += BLOCK_SIZE)
     {
-      // salt->salt_plain_buf = msg to hash (jwt plain header+payload)
-      memcpy (ptrs_tmp[i], salt->salt_plain_buf, salt->salt_plain_len);
+      for (i = 0; i < 4; i++)
+      {
+        // salt->salt_plain_buf = msg to hash (jwt plain header+payload)
+        // new code to support >1 block-sized messages to hash
+        char* salt_plain_start = salt->salt_plain_buf + cbPlainOffset;
+        uint32_t salt_plain_len = MIN(BLOCK_SIZE, salt->salt_plain_len - cbPlainOffset);
 
-      //memset (ptrs_tmp[i] + salt->salt_plain_len, 0, BLOCK_SIZE - salt->salt_plain_len);
+        memcpy(ptrs_tmp[i], salt_plain_start, salt_plain_len);
 
-      // TODO: ??
-      ptrs_tmp[i][salt->salt_plain_len] = 0x80;
+        memset (ptrs_tmp[i] + salt_plain_len, 0, BLOCK_SIZE - salt_plain_len);
 
-      // Copy msg to hash (jwt plain header+payload) into ipad_buf, one
-      // DWORD at a time.  Only first 14 DWORDs (56 bytes) 
-      for (j = 0; j < 14; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
+        // sha256 preprocessing: after msg to hash append 0x80 = 1000 0000
+        // (a single '1' bit + K '0' bits, where K is the minimum number >= 0 such that
+        // L + 1 + K + 64 is a multiple of 512).  The memset above provides the remaining 0's.
+        ptrs_tmp[i][salt_plain_len] = 0x80;
 
-      // TODO: Last two DWORDs of ipad_buf are special
-      ipad_buf[14][i] = 0;
-      ipad_buf[15][i] = (64 + salt->salt_plain_len) * 8;
-    }
+        // Copy msg to hash (jwt plain header+payload) into ipad_buf, one
+        // DWORD at a time.  Only first 14 DWORDs (56 bytes) 
+        for (j = 0; j < 14; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
 
-    // BYTESWAP reverses order of bytes in 32-bit value
-    for (i = 14; i < 16; i++) for (l = 0; l < 4; l++) BYTESWAP (ipad_buf[i][l]);
+        // sha256 preprocessing: append L as a 64-bit big-endian integer
+        ipad_buf[14][i] = 0;
+        ipad_buf[15][i] = (64 + salt_plain_len) * 8;
+      }
 
-    // Hash the message (rest of (4))
-    hashcat_sha256_64 ((__m128i *) ipad_dgst_tmp, (__m128i *) ipad_buf);
+      // BYTESWAP reverses order of bytes in 32-bit value
+      for (i = 14; i < 16; i++) for (l = 0; l < 4; l++) BYTESWAP(ipad_buf[i][l]);
+
+      // Hash the current plan message block (rest of (4))
+      hashcat_sha256_64((__m128i*) ipad_dgst_tmp, (__m128i*) ipad_buf);
+
+    } // End: allow >1 block-sized messages to hash
 
     for (i = 0; i < 4; i++)
     {
       // Preload opad_buf with output from sha256 hash of ipad_buf.  But only
-      // first 8 DWORDs (32 bytes)
-      // TODO: Why?
+      // first 8 DWORDs (32 bytes = 256 bits = sha256 output size)
       for (j = 0; j < 8; j++)
       {
         opad_buf[j][i] = ipad_dgst_tmp[j][i];
       }
 
-      // TODO: Remaining 8 DWORDs are special.  Why?
+      // sha256 preprocessing: after msg to hash, append a single '1' bit + K '0' bits,
+      // where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512.
+      // Then append L (32) as a 64-bit big-endian integer
       opad_buf[ 8][i] = 0x80000000;
       opad_buf[ 9][i] = 0;
       opad_buf[10][i] = 0;
