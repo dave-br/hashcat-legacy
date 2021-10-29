@@ -6759,48 +6759,86 @@ void hashing_01440 (thread_parameter_t *thread_parameter, plain_t *in)
   }
 }
 
-void memcpy_msgblock(char* dest, char* salt_plain_buf, uint32_t salt_plain_len,
-                     uint32_t cbOffsetStart, uint32_t cbToCopy)
+#define IS_IN_BLOCK(x)    \
+  (cbOffsetStart <= (x) && (x) < cbOffsetStart + BLOCK_SIZE)
+
+// memcpy the specified block from within the plain text buffer
+// plus the appended sha256 padding.  Used during sha256 preprocessing.
+// dest must have at least BLOCK_SIZE bytes allocated
+// Returns bool indicating whether more bytes remain to be copied to
+// another block
+bool memcpy_msgblock(
+  char* dest,               // Beginning of block to copy to
+  char* salt_plain_buf,     // Plain text buffer to copy
+  uint32_t salt_plain_len,  // Total length of plain text buffer 
+  uint32_t cbOffsetStart)   // Where in plain text buffer + end padding to begin copy
 {
-  // new code to support >1 block-sized messages to hash
+  bool ret = true;
+
+  // Calculate length of padding
   // total length is msg length plus bits sha256 requires at end:
   //  plain_msg 1 00..<K 0's>..00 <L as 64 bit integer>
-  uint32_t salt_plain_total_bitlen_nopad = salt_plain_len * 8 + 1 + 64;
-  uint32_t salt_plain_bitpad = salt_plain_total_bitlen_nopad % 512;
-  uint32_t cb_salt_plain_total = (salt_plain_total_bitlen_nopad + salt_plain_bitpad) / 8;
+
+  // Bit length except for K zeroes
+  uint32_t salt_plain_total_bitlen_no_k = salt_plain_len * 8 + 1 + 64;
+
+  // Calculate K: salt_plain_total_bitlen_no_k % 512 gives how many past a multiple
+  // of 512 we're at.  The inverse gives how many more we need to hit the next
+  // multiple of 512
+  uint32_t salt_plain_bitlen_k = (512 - (salt_plain_total_bitlen_no_k % 512)) % 512;
+
+  // Zero bits are appended with 0x80 first (1000 0000), which provides the
+  // first 7 zeroes.  So after that, this many all-zero bytes are required
+  uint32_t num_zero_bytes = (salt_plain_bitlen_k - 7) / 8;
+  //uint32_t cb_salt_plain_total = (salt_plain_total_bitlen_nopad + salt_plain_bitpad) / 8;
 
   // The memcpy consists of either (1) copying some of the plain text msg, or
   // (2) copying some of the ending padding bytes, or both
 
   // (1) Copy from plain text msg (if appropriate)
-  uint32_t salt_plain_len = MIN(BLOCK_SIZE, salt_plain_len - cbOffsetStart);
-  if (salt_plain_len > 0)
+  if (salt_plain_len > cbOffsetStart)
   {
-    memcpy(dest, salt_plain_buf + cbOffsetStart, salt_plain_len);
+    uint32_t salt_plain_len_block = MIN(BLOCK_SIZE, salt_plain_len - cbOffsetStart);
+    memcpy(dest, salt_plain_buf + cbOffsetStart, salt_plain_len_block);
   }
 
   // (2) Copy from ending padding bytes (if appropriate)
-  // TODO: JUST NOW
-  if (cbOffsetStart + cb)
 
-  char* salt_plain_start = salt_plain_buf + cbPlainOffset;
+  // End padding starts with 0x80 = 1000 0000
+  if (IS_IN_BLOCK(salt_plain_len))
+  {
+    dest[salt_plain_len - cbOffsetStart] = 0x80;
+  }
 
-  memcpy(ptrs_tmp[i], salt_plain_start, salt_plain_len);
+  // Zero bytes start at salt_plain_len + 1, for num_zero_bytes
+  // Need to intersect above range with actual range we're responsible for
+  // during this block [cbOffsetStart; cbOffsetStart + BLOCK_SIZE)
+  uint32_t zerob_start = MAX(salt_plain_len + 1, cbOffsetStart);
+  uint32_t zerob_end = MIN(salt_plain_len + 1 + num_zero_bytes, cbOffsetStart + BLOCK_SIZE);
+  if (zerob_start < zerob_end)
+  {
+    memset(dest + zerob_start - cbOffsetStart, 0, zerob_end - zerob_start);
+  }
 
-  memset(ptrs_tmp[i] + salt_plain_len, 0, BLOCK_SIZE - salt_plain_len);
+  // Final 8 bytes are the size of the message in bits: 64 (previously
+  // hashed key) + salt_plain_len
+  uint32_t size_start = MAX(salt_plain_len + 1 + num_zero_bytes, cbOffsetStart);
+  uint32_t size_end = MIN(salt_plain_len + 1 + num_zero_bytes + 8, cbOffsetStart + BLOCK_SIZE);
+  if (size_start < size_end)
+  {
+    uint32_t msgSize[2] = { 0, (64 + salt_plain_len) * 8 };
+    for (uint32_t l = 0; l < 2; l++) BYTESWAP(msgSize[l]);
+    memcpy(
+      dest + size_start - cbOffsetStart,
+      ((char*)&msgSize[0]) + (8 - (size_end - size_start)),
+      size_end - size_start);
 
-  // sha256 preprocessing: after msg to hash append 0x80 = 1000 0000
-  // (a single '1' bit + K '0' bits, where K is the minimum number >= 0 such that
-  // L + 1 + K + 64 is a multiple of 512).  The memset above provides the remaining 0's.
-  ptrs_tmp[i][salt_plain_len] = 0x80;
+    // Only way we're done (ret==false) is if we just copied the final
+    // 8 bytes for the size
+    ret = (size_end - size_start != 8);
+  }
 
-  // Copy msg to hash (jwt plain header+payload) into ipad_buf, one
-  // DWORD at a time.  Only first 14 DWORDs (56 bytes) 
-  for (j = 0; j < 14; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
-
-  // sha256 preprocessing: append L as a 64-bit big-endian integer
-  ipad_buf[14][i] = 0;
-  ipad_buf[15][i] = (64 + salt_plain_len) * 8;
+  return ret;
 }
 
 // plains[] = next 4 keys from word list to try
@@ -6906,38 +6944,30 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
     uint32_t cb_salt_plain_total = (salt_plain_total_bitlen_nopad + salt_plain_bitpad) / 8;
 
     // Begin: allow >1 block-sized messages to hash
-    for (uint32_t cbPlainOffset = 0; cbPlainOffset < cb_salt_plain_total; cbPlainOffset += BLOCK_SIZE)
+    uint32_t cbPlainOffset = 0;
+    bool moreBlocks = true;
+    while (moreBlocks)
     {
+      moreBlocks = false;
       for (i = 0; i < 4; i++)
       {
-        // salt->salt_plain_buf = msg to hash (jwt plain header+payload)
-        // new code to support >1 block-sized messages to hash
-        char* salt_plain_start = salt->salt_plain_buf + cbPlainOffset;
-        uint32_t salt_plain_len = MIN(BLOCK_SIZE, salt->salt_plain_len - cbPlainOffset);
+        moreBlocks ||= memcpy_msgblock(
+          ptrs_tmp[i],               // Beginning of block to copy to
+          salt->salt_plain_buf,     // msg to hash (jwt plain header+payload)
+          salt->salt_plain_len,  // Total length of plain text buffer 
+          cbPlainOffset);    // Where in plain text buffer + end padding to begin copy
 
-        memcpy(ptrs_tmp[i], salt_plain_start, salt_plain_len);
-
-        memset (ptrs_tmp[i] + salt_plain_len, 0, BLOCK_SIZE - salt_plain_len);
-
-        // sha256 preprocessing: after msg to hash append 0x80 = 1000 0000
-        // (a single '1' bit + K '0' bits, where K is the minimum number >= 0 such that
-        // L + 1 + K + 64 is a multiple of 512).  The memset above provides the remaining 0's.
-        ptrs_tmp[i][salt_plain_len] = 0x80;
-
-        // Copy msg to hash (jwt plain header+payload) into ipad_buf, one
-        // DWORD at a time.  Only first 14 DWORDs (56 bytes) 
-        for (j = 0; j < 14; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
-
-        // sha256 preprocessing: append L as a 64-bit big-endian integer
-        ipad_buf[14][i] = 0;
-        ipad_buf[15][i] = (64 + salt_plain_len) * 8;
+        // Copy msg to hash into ipad_buf, one DWORD at a time.
+        for (j = 0; j < 16; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
       }
 
       // BYTESWAP reverses order of bytes in 32-bit value
-      for (i = 14; i < 16; i++) for (l = 0; l < 4; l++) BYTESWAP(ipad_buf[i][l]);
+      //for (i = 14; i < 16; i++) for (l = 0; l < 4; l++) BYTESWAP(ipad_buf[i][l]);
 
-      // Hash the current plan message block (rest of (4))
+      // Hash the current plain message block (rest of (4))
       hashcat_sha256_64((__m128i*) ipad_dgst_tmp, (__m128i*) ipad_buf);
+
+      cbPlainOffset += BLOCK_SIZE;
 
     } // End: allow >1 block-sized messages to hash
 
@@ -6952,7 +6982,9 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
 
       // sha256 preprocessing: after msg to hash, append a single '1' bit + K '0' bits,
       // where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512.
-      // Then append L (32) as a 64-bit big-endian integer
+      // Then append L as a 64-bit big-endian integer:
+      // 64 bytes for K XOR opad + 32 bytes for H(K XOR ipad, text), then
+      // converted to bit count.
       opad_buf[ 8][i] = 0x80000000;
       opad_buf[ 9][i] = 0;
       opad_buf[10][i] = 0;
