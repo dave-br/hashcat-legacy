@@ -6759,6 +6759,50 @@ void hashing_01440 (thread_parameter_t *thread_parameter, plain_t *in)
   }
 }
 
+void memcpy_msgblock(char* dest, char* salt_plain_buf, uint32_t salt_plain_len,
+                     uint32_t cbOffsetStart, uint32_t cbToCopy)
+{
+  // new code to support >1 block-sized messages to hash
+  // total length is msg length plus bits sha256 requires at end:
+  //  plain_msg 1 00..<K 0's>..00 <L as 64 bit integer>
+  uint32_t salt_plain_total_bitlen_nopad = salt_plain_len * 8 + 1 + 64;
+  uint32_t salt_plain_bitpad = salt_plain_total_bitlen_nopad % 512;
+  uint32_t cb_salt_plain_total = (salt_plain_total_bitlen_nopad + salt_plain_bitpad) / 8;
+
+  // The memcpy consists of either (1) copying some of the plain text msg, or
+  // (2) copying some of the ending padding bytes, or both
+
+  // (1) Copy from plain text msg (if appropriate)
+  uint32_t salt_plain_len = MIN(BLOCK_SIZE, salt_plain_len - cbOffsetStart);
+  if (salt_plain_len > 0)
+  {
+    memcpy(dest, salt_plain_buf + cbOffsetStart, salt_plain_len);
+  }
+
+  // (2) Copy from ending padding bytes (if appropriate)
+  // TODO: JUST NOW
+  if (cbOffsetStart + cb)
+
+  char* salt_plain_start = salt_plain_buf + cbPlainOffset;
+
+  memcpy(ptrs_tmp[i], salt_plain_start, salt_plain_len);
+
+  memset(ptrs_tmp[i] + salt_plain_len, 0, BLOCK_SIZE - salt_plain_len);
+
+  // sha256 preprocessing: after msg to hash append 0x80 = 1000 0000
+  // (a single '1' bit + K '0' bits, where K is the minimum number >= 0 such that
+  // L + 1 + K + 64 is a multiple of 512).  The memset above provides the remaining 0's.
+  ptrs_tmp[i][salt_plain_len] = 0x80;
+
+  // Copy msg to hash (jwt plain header+payload) into ipad_buf, one
+  // DWORD at a time.  Only first 14 DWORDs (56 bytes) 
+  for (j = 0; j < 14; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
+
+  // sha256 preprocessing: append L as a 64-bit big-endian integer
+  ipad_buf[14][i] = 0;
+  ipad_buf[15][i] = (64 + salt_plain_len) * 8;
+}
+
 // plains[] = next 4 keys from word list to try
 void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
 {
