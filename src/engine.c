@@ -6773,7 +6773,7 @@ bool memcpy_msgblock(
   uint32_t salt_plain_len,  // Total length of plain text buffer 
   uint32_t cbOffsetStart)   // Where in plain text buffer + end padding to begin copy
 {
-  bool ret = true;
+  bool ret = 1;
 
   // Calculate length of padding
   // total length is msg length plus bits sha256 requires at end:
@@ -6939,23 +6939,23 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
     // new code to support >1 block-sized messages to hash
     // total length is msg length plus bits sha256 requires at end:
     //  plain_msg 1 00..<K 0's>..00 <L as 64 bit integer>
-    uint32_t salt_plain_total_bitlen_nopad = salt->salt_plain_len * 8 + 1 + 64;
-    uint32_t salt_plain_bitpad = salt_plain_total_bitlen_nopad % 512;
-    uint32_t cb_salt_plain_total = (salt_plain_total_bitlen_nopad + salt_plain_bitpad) / 8;
+    //uint32_t salt_plain_total_bitlen_nopad = salt->salt_plain_len * 8 + 1 + 64;
+    //uint32_t salt_plain_bitpad = salt_plain_total_bitlen_nopad % 512;
+    //uint32_t cb_salt_plain_total = (salt_plain_total_bitlen_nopad + salt_plain_bitpad) / 8;
 
     // Begin: allow >1 block-sized messages to hash
     uint32_t cbPlainOffset = 0;
-    bool moreBlocks = true;
+    bool moreBlocks = 1;
     while (moreBlocks)
     {
-      moreBlocks = false;
+      moreBlocks = 0;
       for (i = 0; i < 4; i++)
       {
-        moreBlocks ||= memcpy_msgblock(
-          ptrs_tmp[i],               // Beginning of block to copy to
-          salt->salt_plain_buf,     // msg to hash (jwt plain header+payload)
-          salt->salt_plain_len,  // Total length of plain text buffer 
-          cbPlainOffset);    // Where in plain text buffer + end padding to begin copy
+        moreBlocks = moreBlocks || memcpy_msgblock(
+          ptrs_tmp[i],                // Beginning of block to copy to
+          salt->salt_plain_buf,       // msg to hash (jwt plain header+payload)
+          salt->salt_plain_len,       // Total length of plain text buffer 
+          cbPlainOffset);
 
         // Copy msg to hash into ipad_buf, one DWORD at a time.
         for (j = 0; j < 16; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
