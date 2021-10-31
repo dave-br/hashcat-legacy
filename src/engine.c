@@ -6943,11 +6943,13 @@ void hashing_01450 (thread_parameter_t *thread_parameter, plain_t *plains)
       moreBlocks = 0;
       for (i = 0; i < 4; i++)
       {
-        moreBlocks = moreBlocks || memcpy_msgblock(
+        bool moreBlocksCur = memcpy_msgblock(
           ptrs_tmp[i],                // Beginning of block to copy to
           salt->salt_plain_buf,       // msg to hash (jwt plain header+payload)
           salt->salt_plain_len,       // Total length of plain text buffer 
           cbPlainOffset);
+
+        moreBlocks = moreBlocks || moreBlocksCur;
 
         // Copy msg to hash into ipad_buf, one DWORD at a time.
         for (j = 0; j < 16; j++) ipad_buf[j][i] = plains_tmp[i].buf[j];
