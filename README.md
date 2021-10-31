@@ -1,3 +1,19 @@
+## *This Fork* ##
+
+This is a fork of hashcat-legacy that probably no one should use.
+
+I created this so I could solve a WebGoat challenge that involved cracking the signature of a JWT.  Way easier to use the latest hashcat (which has direct support for JWTs), but it wouldn't run in a docker container on my hardware, so I needed hashcat-legacy.  But that had a restriction on the size of the message whose signature needed to be cracked, when using -m 1450 (HMAC-SHA256).  So I made this.
+
+Caveats:
+
+1. I am a noob to the code base and to hashing.  Don't trust me.
+2. I barely tested this at all.  Just tried it on a few JWTs served up by WebGoat, and it helped me pass them.  So I stopped thinking about this.
+3. There are probably code changes that are unnecessary
+4. There are probably bugs I don't know about
+5. It's still building for debug (optimizations off) because it's fast enough for me.
+
+Thanks to the pull request from peterpt against the real hashcat-legacy repo (https://github.com/hashcat/hashcat-legacy/pull/72/files) for some fixes to the makefile to allow building.
+
 ## *Hashcat* ##
 
 **Hashcat** is an advanced CPU-based password recovery utility for Windows 7/8/10, Apple OS X, and GNU/Linux, supporting seven unique modes of attack for over 100 optimized hashing algorithms.
